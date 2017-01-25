@@ -385,6 +385,13 @@ func (fbo *folderBranchOps) markForReIdentifyIfNeeded(now time.Time, maxValid ti
 	}
 }
 
+// markForReIdentify marks this tlf for lazy reidentification.
+func (fbo *folderBranchOps) markForReIdentify() {
+	fbo.identifyLock.Lock()
+	defer fbo.identifyLock.Unlock()
+	fbo.identifyDone = false
+}
+
 // Shutdown safely shuts down any background goroutines that may have
 // been launched by folderBranchOps.
 func (fbo *folderBranchOps) Shutdown(ctx context.Context) error {
@@ -1342,6 +1349,7 @@ func (fbo *folderBranchOps) SetInitialHeadFromServer(
 	lState := makeFBOLockState()
 	head := fbo.getHead(lState)
 	if head != (ImmutableRootMetadata{}) && head.mdID == md.mdID {
+		fbo.markForReIdentify()
 		fbo.log.CDebugf(ctx, "Head MD already set to revision %d (%s), no "+
 			"need to set initial head again", md.Revision(), md.MergedStatus())
 		return nil
