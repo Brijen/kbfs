@@ -149,6 +149,20 @@ func NewAssetMetadataWithAudio(v AssetMetadataAudio) AssetMetadata {
 	}
 }
 
+type AssetTag int
+
+const (
+	AssetTag_PRIMARY AssetTag = 0
+)
+
+var AssetTagMap = map[string]AssetTag{
+	"PRIMARY": 0,
+}
+
+var AssetTagRevMap = map[AssetTag]string{
+	0: "PRIMARY",
+}
+
 type Asset struct {
 	Filename  string        `codec:"filename" json:"filename"`
 	Region    string        `codec:"region" json:"region"`
@@ -163,22 +177,33 @@ type Asset struct {
 	Title     string        `codec:"title" json:"title"`
 	Nonce     []byte        `codec:"nonce" json:"nonce"`
 	Metadata  AssetMetadata `codec:"metadata" json:"metadata"`
+	Tag       AssetTag      `codec:"tag" json:"tag"`
 }
 
 type MessageAttachment struct {
-	Object   Asset  `codec:"object" json:"object"`
-	Preview  *Asset `codec:"preview,omitempty" json:"preview,omitempty"`
-	Metadata []byte `codec:"metadata" json:"metadata"`
+	Object   Asset   `codec:"object" json:"object"`
+	Preview  *Asset  `codec:"preview,omitempty" json:"preview,omitempty"`
+	Previews []Asset `codec:"previews" json:"previews"`
+	Metadata []byte  `codec:"metadata" json:"metadata"`
+	Uploaded bool    `codec:"uploaded" json:"uploaded"`
+}
+
+type MessageAttachmentUploaded struct {
+	MessageID MessageID `codec:"messageID" json:"messageID"`
+	Object    Asset     `codec:"object" json:"object"`
+	Previews  []Asset   `codec:"previews" json:"previews"`
+	Metadata  []byte    `codec:"metadata" json:"metadata"`
 }
 
 type MessageBody struct {
-	MessageType__ MessageType                  `codec:"messageType" json:"messageType"`
-	Text__        *MessageText                 `codec:"text,omitempty" json:"text,omitempty"`
-	Attachment__  *MessageAttachment           `codec:"attachment,omitempty" json:"attachment,omitempty"`
-	Edit__        *MessageEdit                 `codec:"edit,omitempty" json:"edit,omitempty"`
-	Delete__      *MessageDelete               `codec:"delete,omitempty" json:"delete,omitempty"`
-	Metadata__    *MessageConversationMetadata `codec:"metadata,omitempty" json:"metadata,omitempty"`
-	Headline__    *MessageHeadline             `codec:"headline,omitempty" json:"headline,omitempty"`
+	MessageType__        MessageType                  `codec:"messageType" json:"messageType"`
+	Text__               *MessageText                 `codec:"text,omitempty" json:"text,omitempty"`
+	Attachment__         *MessageAttachment           `codec:"attachment,omitempty" json:"attachment,omitempty"`
+	Edit__               *MessageEdit                 `codec:"edit,omitempty" json:"edit,omitempty"`
+	Delete__             *MessageDelete               `codec:"delete,omitempty" json:"delete,omitempty"`
+	Metadata__           *MessageConversationMetadata `codec:"metadata,omitempty" json:"metadata,omitempty"`
+	Headline__           *MessageHeadline             `codec:"headline,omitempty" json:"headline,omitempty"`
+	Attachmentuploaded__ *MessageAttachmentUploaded   `codec:"attachmentuploaded,omitempty" json:"attachmentuploaded,omitempty"`
 }
 
 func (o *MessageBody) MessageType() (ret MessageType, err error) {
@@ -211,6 +236,11 @@ func (o *MessageBody) MessageType() (ret MessageType, err error) {
 	case MessageType_HEADLINE:
 		if o.Headline__ == nil {
 			err = errors.New("unexpected nil value for Headline__")
+			return ret, err
+		}
+	case MessageType_ATTACHMENTUPLOADED:
+		if o.Attachmentuploaded__ == nil {
+			err = errors.New("unexpected nil value for Attachmentuploaded__")
 			return ret, err
 		}
 	}
@@ -277,6 +307,16 @@ func (o MessageBody) Headline() MessageHeadline {
 	return *o.Headline__
 }
 
+func (o MessageBody) Attachmentuploaded() MessageAttachmentUploaded {
+	if o.MessageType__ != MessageType_ATTACHMENTUPLOADED {
+		panic("wrong case accessed")
+	}
+	if o.Attachmentuploaded__ == nil {
+		return MessageAttachmentUploaded{}
+	}
+	return *o.Attachmentuploaded__
+}
+
 func NewMessageBodyWithText(v MessageText) MessageBody {
 	return MessageBody{
 		MessageType__: MessageType_TEXT,
@@ -316,6 +356,13 @@ func NewMessageBodyWithHeadline(v MessageHeadline) MessageBody {
 	return MessageBody{
 		MessageType__: MessageType_HEADLINE,
 		Headline__:    &v,
+	}
+}
+
+func NewMessageBodyWithAttachmentuploaded(v MessageAttachmentUploaded) MessageBody {
+	return MessageBody{
+		MessageType__:        MessageType_ATTACHMENTUPLOADED,
+		Attachmentuploaded__: &v,
 	}
 }
 
@@ -522,14 +569,17 @@ type BodyPlaintextVersion int
 
 const (
 	BodyPlaintextVersion_V1 BodyPlaintextVersion = 1
+	BodyPlaintextVersion_V2 BodyPlaintextVersion = 2
 )
 
 var BodyPlaintextVersionMap = map[string]BodyPlaintextVersion{
 	"V1": 1,
+	"V2": 2,
 }
 
 var BodyPlaintextVersionRevMap = map[BodyPlaintextVersion]string{
 	1: "V1",
+	2: "V2",
 }
 
 func (e BodyPlaintextVersion) String() string {
@@ -539,13 +589,22 @@ func (e BodyPlaintextVersion) String() string {
 	return ""
 }
 
+type BodyPlaintextMetaInfo struct {
+	Crit bool `codec:"crit" json:"crit"`
+}
+
+type BodyPlaintextUnsupported struct {
+	Mi BodyPlaintextMetaInfo `codec:"mi" json:"mi"`
+}
+
 type BodyPlaintextV1 struct {
 	MessageBody MessageBody `codec:"messageBody" json:"messageBody"`
 }
 
 type BodyPlaintext struct {
-	Version__ BodyPlaintextVersion `codec:"version" json:"version"`
-	V1__      *BodyPlaintextV1     `codec:"v1,omitempty" json:"v1,omitempty"`
+	Version__ BodyPlaintextVersion      `codec:"version" json:"version"`
+	V1__      *BodyPlaintextV1          `codec:"v1,omitempty" json:"v1,omitempty"`
+	Default__ *BodyPlaintextUnsupported `codec:"default,omitempty" json:"default,omitempty"`
 }
 
 func (o *BodyPlaintext) Version() (ret BodyPlaintextVersion, err error) {
@@ -553,6 +612,11 @@ func (o *BodyPlaintext) Version() (ret BodyPlaintextVersion, err error) {
 	case BodyPlaintextVersion_V1:
 		if o.V1__ == nil {
 			err = errors.New("unexpected nil value for V1__")
+			return ret, err
+		}
+	default:
+		if o.Default__ == nil {
+			err = errors.New("unexpected nil value for Default__")
 			return ret, err
 		}
 	}
@@ -569,10 +633,27 @@ func (o BodyPlaintext) V1() BodyPlaintextV1 {
 	return *o.V1__
 }
 
+func (o BodyPlaintext) Default() BodyPlaintextUnsupported {
+	if o.Version__ == BodyPlaintextVersion_V1 {
+		panic("wrong case accessed")
+	}
+	if o.Default__ == nil {
+		return BodyPlaintextUnsupported{}
+	}
+	return *o.Default__
+}
+
 func NewBodyPlaintextWithV1(v BodyPlaintextV1) BodyPlaintext {
 	return BodyPlaintext{
 		Version__: BodyPlaintextVersion_V1,
 		V1__:      &v,
+	}
+}
+
+func NewBodyPlaintextDefault(version BodyPlaintextVersion, v BodyPlaintextUnsupported) BodyPlaintext {
+	return BodyPlaintext{
+		Version__: version,
+		Default__: &v,
 	}
 }
 
@@ -723,10 +804,56 @@ type ConversationInfoLocal struct {
 	FinalizeInfo *ConversationFinalizeInfo `codec:"finalizeInfo,omitempty" json:"finalizeInfo,omitempty"`
 }
 
+type ConversationErrorType int
+
+const (
+	ConversationErrorType_MISC                    ConversationErrorType = 0
+	ConversationErrorType_MISSINGINFO             ConversationErrorType = 1
+	ConversationErrorType_SELFREKEYNEEDED         ConversationErrorType = 2
+	ConversationErrorType_OTHERREKEYNEEDED        ConversationErrorType = 3
+	ConversationErrorType_IDENTIFY                ConversationErrorType = 4
+	ConversationErrorType_LOCALMAXMESSAGENOTFOUND ConversationErrorType = 5
+)
+
+var ConversationErrorTypeMap = map[string]ConversationErrorType{
+	"MISC":                    0,
+	"MISSINGINFO":             1,
+	"SELFREKEYNEEDED":         2,
+	"OTHERREKEYNEEDED":        3,
+	"IDENTIFY":                4,
+	"LOCALMAXMESSAGENOTFOUND": 5,
+}
+
+var ConversationErrorTypeRevMap = map[ConversationErrorType]string{
+	0: "MISC",
+	1: "MISSINGINFO",
+	2: "SELFREKEYNEEDED",
+	3: "OTHERREKEYNEEDED",
+	4: "IDENTIFY",
+	5: "LOCALMAXMESSAGENOTFOUND",
+}
+
+func (e ConversationErrorType) String() string {
+	if v, ok := ConversationErrorTypeRevMap[e]; ok {
+		return v
+	}
+	return ""
+}
+
 type ConversationErrorLocal struct {
-	Message    string       `codec:"message" json:"message"`
-	RemoteConv Conversation `codec:"remoteConv" json:"remoteConv"`
-	Permanent  bool         `codec:"permanent" json:"permanent"`
+	Typ        ConversationErrorType   `codec:"typ" json:"typ"`
+	Message    string                  `codec:"message" json:"message"`
+	RemoteConv Conversation            `codec:"remoteConv" json:"remoteConv"`
+	Permanent  bool                    `codec:"permanent" json:"permanent"`
+	RekeyInfo  *ConversationErrorRekey `codec:"rekeyInfo,omitempty" json:"rekeyInfo,omitempty"`
+}
+
+type ConversationErrorRekey struct {
+	TlfName     string   `codec:"tlfName" json:"tlfName"`
+	TlfPublic   bool     `codec:"tlfPublic" json:"tlfPublic"`
+	Rekeyers    []string `codec:"rekeyers" json:"rekeyers"`
+	WriterNames []string `codec:"writerNames" json:"writerNames"`
+	ReaderNames []string `codec:"readerNames" json:"readerNames"`
 }
 
 type ConversationLocal struct {
@@ -960,9 +1087,10 @@ type GetConversationForCLILocalArg struct {
 }
 
 type GetMessagesLocalArg struct {
-	ConversationID   ConversationID               `codec:"conversationID" json:"conversationID"`
-	MessageIDs       []MessageID                  `codec:"messageIDs" json:"messageIDs"`
-	IdentifyBehavior keybase1.TLFIdentifyBehavior `codec:"identifyBehavior" json:"identifyBehavior"`
+	ConversationID           ConversationID               `codec:"conversationID" json:"conversationID"`
+	MessageIDs               []MessageID                  `codec:"messageIDs" json:"messageIDs"`
+	DisableResolveSupersedes bool                         `codec:"disableResolveSupersedes" json:"disableResolveSupersedes"`
+	IdentifyBehavior         keybase1.TLFIdentifyBehavior `codec:"identifyBehavior" json:"identifyBehavior"`
 }
 
 type PostAttachmentLocalArg struct {
@@ -1024,6 +1152,7 @@ type FindConversationsLocalArg struct {
 	Visibility       TLFVisibility                `codec:"visibility" json:"visibility"`
 	TopicType        TopicType                    `codec:"topicType" json:"topicType"`
 	TopicName        string                       `codec:"topicName" json:"topicName"`
+	OneChatPerTLF    *bool                        `codec:"oneChatPerTLF,omitempty" json:"oneChatPerTLF,omitempty"`
 	IdentifyBehavior keybase1.TLFIdentifyBehavior `codec:"identifyBehavior" json:"identifyBehavior"`
 }
 
